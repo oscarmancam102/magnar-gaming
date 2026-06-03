@@ -101,7 +101,7 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        let socket = io();
+        let socket = io(window.location.origin);
         let currentRoom = null;
         let myColor = null;
         let gameActive = false;

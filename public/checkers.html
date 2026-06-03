@@ -2,227 +2,438 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>3D Checkers - Magnar Gaming</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: linear-gradient(135deg, #0a0f1e, #0a1a2e); overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        canvas { width: 100%; height: 100%; display: block; cursor: pointer; }
-        
-        /* Top bar */
-        .top-bar {
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(135deg, #0a0f1e, #0a1a2e);
+            overflow: hidden;
+            font-family: 'Segoe UI', 'Poppins', sans-serif;
+            touch-action: none;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: pointer;
+            touch-action: none;
+        }
+        .ui-overlay {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            background: rgba(0,0,0,0.5);
-            backdrop-filter: blur(10px);
-            z-index: 100;
-            flex-wrap: wrap;
-            gap: 10px;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 10;
         }
-        
-        .mode-buttons {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .mode-buttons button {
-            background: #00adb5;
-            color: #1a1a2e;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 30px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .mode-buttons button.mode-active {
-            background: #ffd700;
-            color: #1a1a2e;
-            box-shadow: 0 0 10px rgba(255,215,0,0.5);
-        }
-        
-        .control-buttons {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .control-buttons button {
-            background: #ff4757;
-            color: white;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 30px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        
-        .back-btn {
-            background: #00adb5;
-            color: #1a1a2e;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 30px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        
-        .turn-text {
+        .top-bar {
             position: absolute;
-            top: 80px;
+            top: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0 16px;
+            pointer-events: auto;
+        }
+        .game-title {
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+            padding: 8px 20px;
+            border-radius: 40px;
+            border: 1px solid rgba(255,215,0,0.3);
+        }
+        .game-title h1 {
+            font-size: 1.2rem;
+            background: linear-gradient(135deg, #fff, #ffd700);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .score-board {
+            position: absolute;
+            top: 20px;
+            right: 16px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+            padding: 8px 16px;
+            border-radius: 30px;
+            display: flex;
+            gap: 15px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            pointer-events: auto;
+        }
+        .score-red { color: #ff8888; }
+        .score-black { color: #aaaaaa; }
+        .turn-indicator {
+            position: absolute;
+            bottom: 80px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(8px);
             padding: 10px 24px;
             border-radius: 40px;
-            color: #ffd700;
             font-weight: bold;
-            font-size: 1.1rem;
-            pointer-events: none;
-            z-index: 100;
-            white-space: nowrap;
-        }
-        
-        .win-message {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.9);
-            padding: 30px 50px;
-            border-radius: 20px;
-            text-align: center;
-            z-index: 200;
-            display: none;
-            border: 2px solid #ffd700;
-        }
-        
-        .win-message h2 {
+            font-size: 1rem;
+            border: 1px solid #ffd700;
             color: #ffd700;
+            white-space: nowrap;
+            pointer-events: auto;
+        }
+        .control-buttons {
+            position: absolute;
+            bottom: 20px;
+            right: 16px;
+            display: flex;
+            gap: 12px;
+            pointer-events: auto;
+        }
+        .ctrl-btn {
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid #ffd700;
+            color: #ffd700;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            font-size: 1.3rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s;
+        }
+        .ctrl-btn:active {
+            transform: scale(0.92);
+        }
+        .win-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            backdrop-filter: blur(20px);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: 0.3s;
+        }
+        .win-modal.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        .win-content {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 30px 40px;
+            border-radius: 30px;
+            text-align: center;
+            border: 2px solid #ffd700;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+        }
+        .win-content h2 {
             font-size: 2rem;
             margin-bottom: 20px;
         }
-        
-        .win-message button {
-            background: #00adb5;
+        .win-content button {
+            background: #ffd700;
             color: #1a1a2e;
             border: none;
             padding: 10px 30px;
-            border-radius: 30px;
+            border-radius: 40px;
             font-weight: bold;
-            cursor: pointer;
             font-size: 1rem;
+            cursor: pointer;
+            margin-top: 15px;
         }
-        
-        @media (max-width: 768px) {
-            .top-bar { padding: 10px; }
-            .mode-buttons button, .control-buttons button, .back-btn { padding: 6px 12px; font-size: 0.8rem; }
-            .turn-text { top: 70px; font-size: 0.9rem; white-space: nowrap; }
+        @media (max-width: 600px) {
+            .game-title h1 { font-size: 0.9rem; }
+            .score-board { top: 12px; right: 12px; padding: 5px 12px; font-size: 0.7rem; }
+            .turn-indicator { bottom: 70px; padding: 6px 16px; font-size: 0.8rem; white-space: nowrap; }
+            .ctrl-btn { width: 38px; height: 38px; font-size: 1rem; }
+            .win-content h2 { font-size: 1.5rem; }
+            .win-content button { padding: 8px 20px; }
         }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
-    
-    <div class="top-bar">
-        <div class="mode-buttons">
-            <button id="aiModeBtn" class="mode-active">🤖 VS AI</button>
-            <button id="twoPlayerBtn">👥 2 PLAYER</button>
+    <div class="ui-overlay">
+        <div class="top-bar">
+            <div class="game-title"><h1>⚡ MAGNAR CHECKERS</h1></div>
         </div>
+        <div class="score-board">
+            <span class="score-red">🔴 <span id="redScore">0</span></span>
+            <span class="score-black">⚫ <span id="blackScore">0</span></span>
+        </div>
+        <div class="turn-indicator" id="turnText">🔴 YOUR TURN</div>
         <div class="control-buttons">
-            <button id="resetBtn">🔄 New Game</button>
-            <button class="back-btn" onclick="window.close()">← Back</button>
+            <button class="ctrl-btn" id="resetBtn">🔄</button>
         </div>
     </div>
-    
-    <div class="turn-text" id="turnText">🔴 RED'S TURN</div>
-    
-    <div id="winMessage" class="win-message">
-        <h2 id="winnerText">🏆 RED WINS! 🏆</h2>
-        <button onclick="resetGame()">Play Again</button>
+    <div id="winModal" class="win-modal">
+        <div class="win-content">
+            <h2 id="winMessage">🏆 YOU WIN! 🏆</h2>
+            <button id="playAgainBtn">PLAY AGAIN</button>
+        </div>
     </div>
 
     <script type="importmap">
-        {"imports":{"three":"https://unpkg.com/three@0.128.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.128.0/examples/jsm/"}}
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
     </script>
 
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+        // -------------------- GAME STATE --------------------
         let board = Array(8).fill().map(() => Array(8).fill(null));
-        let currentPlayer = 'red';
-        let gameMode = 'ai'; // 'ai' or 'twoPlayer'
+        let currentPlayer = 'red';   // red = human, black = AI
         let gameOver = false;
-        let winner = null;
         let selectedPiece = null;
         let selectedRow = null, selectedCol = null;
+        let redScore = 0, blackScore = 0;
         let mustJumpAgain = false;
         let jumpFromRow = null, jumpFromCol = null;
+
+        // Three.js globals
         let scene, camera, renderer, controls, piecesGroup, raycaster, mouse, highlights = [];
-        
         const lightColor = 0xf0d9b5, darkColor = 0xb58863, redColor = 0xe74c3c, blackColor = 0x2c3e50;
 
+        // DOM elements
+        const redScoreSpan = document.getElementById('redScore');
+        const blackScoreSpan = document.getElementById('blackScore');
+        const turnText = document.getElementById('turnText');
+        const resetBtn = document.getElementById('resetBtn');
+        const winModal = document.getElementById('winModal');
+        const winMessage = document.getElementById('winMessage');
+        const playAgainBtn = document.getElementById('playAgainBtn');
+
+        // -------------------- BOARD INIT --------------------
         function initBoard() {
             board = Array(8).fill().map(() => Array(8).fill(null));
-            for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) board[r][c] = { color: 'black', king: false };
-            for (let r = 5; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) board[r][c] = { color: 'red', king: false };
+            // Black pieces (top)
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if ((r + c) % 2 === 1) board[r][c] = { color: 'black', king: false };
+                }
+            }
+            // Red pieces (bottom)
+            for (let r = 5; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if ((r + c) % 2 === 1) board[r][c] = { color: 'red', king: false };
+                }
+            }
         }
 
-        // Check win condition
+        // -------------------- UTILITIES --------------------
+        function updateUI() {
+            redScoreSpan.innerText = redScore;
+            blackScoreSpan.innerText = blackScore;
+            if (!gameOver) {
+                turnText.innerHTML = currentPlayer === 'red' ? '🔴 YOUR TURN' : '⚫ AI THINKING...';
+            }
+        }
+
+        function showWin(winner) {
+            gameOver = true;
+            winMessage.innerHTML = winner === 'red' ? '🏆 YOU WIN! 🏆' : '🏆 AI WINS! 🏆';
+            winModal.classList.add('show');
+        }
+
+        function hideWin() {
+            winModal.classList.remove('show');
+        }
+
+        function resetGame() {
+            initBoard();
+            renderPieces();
+            redScore = 0;
+            blackScore = 0;
+            currentPlayer = 'red';
+            gameOver = false;
+            mustJumpAgain = false;
+            selectedPiece = null;
+            clearHighlights();
+            updateUI();
+            hideWin();
+        }
+
+        // -------------------- MOVE VALIDATION (without forced capture – you can move anywhere) --------------------
+        function isValidNormalMove(fr, fc, tr, tc) {
+            const piece = board[fr][fc];
+            if (!piece) return false;
+            if (board[tr][tc]) return false;
+            const rowDiff = tr - fr;
+            const colDiff = Math.abs(tc - fc);
+            const direction = piece.color === 'red' ? -1 : 1;
+            if (Math.abs(rowDiff) !== 1 || colDiff !== 1) return false;
+            if (piece.king || rowDiff === direction) return true;
+            return false;
+        }
+
+        function isValidJump(fr, fc, tr, tc) {
+            const piece = board[fr][fc];
+            if (!piece) return false;
+            if (board[tr][tc]) return false;
+            const rowDiff = tr - fr;
+            const colDiff = Math.abs(tc - fc);
+            if (Math.abs(rowDiff) !== 2 || colDiff !== 2) return false;
+            const midRow = (fr + tr) / 2;
+            const midCol = (fc + tc) / 2;
+            const jumped = board[midRow][midCol];
+            if (jumped && jumped.color !== piece.color) return true;
+            return false;
+        }
+
+        function getValidMoves(row, col) {
+            const piece = board[row][col];
+            if (!piece) return [];
+            const moves = [];
+            const dirs = piece.king ? [-1, 1] : [piece.color === 'red' ? -1 : 1];
+            // jumps
+            for (const rd of dirs) {
+                for (const cd of [-1, 1]) {
+                    const tr = row + rd * 2;
+                    const tc = col + cd * 2;
+                    if (tr >= 0 && tr < 8 && tc >= 0 && tc < 8 && isValidJump(row, col, tr, tc)) {
+                        moves.push({ row: tr, col: tc, isJump: true });
+                    }
+                }
+            }
+            // normal moves only if no jumps
+            if (moves.length === 0) {
+                for (const rd of dirs) {
+                    for (const cd of [-1, 1]) {
+                        const tr = row + rd;
+                        const tc = col + cd;
+                        if (tr >= 0 && tr < 8 && tc >= 0 && tc < 8 && isValidNormalMove(row, col, tr, tc)) {
+                            moves.push({ row: tr, col: tc, isJump: false });
+                        }
+                    }
+                }
+            }
+            return moves;
+        }
+
+        function getAllValidMoves(color) {
+            const moves = [];
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = board[r][c];
+                    if (piece && piece.color === color) {
+                        const pieceMoves = getValidMoves(r, c);
+                        for (const m of pieceMoves) {
+                            moves.push({ from: { row: r, col: c }, to: m });
+                        }
+                    }
+                }
+            }
+            return moves;
+        }
+
         function checkWin() {
             let redCount = 0, blackCount = 0;
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
-                    const piece = board[r][c];
-                    if (piece) {
-                        if (piece.color === 'red') redCount++;
-                        else blackCount++;
-                    }
+                    const p = board[r][c];
+                    if (p) p.color === 'red' ? redCount++ : blackCount++;
                 }
             }
-            
-            // Also check if current player has any legal moves (stalemate)
-            let redHasMoves = false, blackHasMoves = false;
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    const piece = board[r][c];
-                    if (piece && piece.color === 'red' && getValidMoves(r, c).length > 0) redHasMoves = true;
-                    if (piece && piece.color === 'black' && getValidMoves(r, c).length > 0) blackHasMoves = true;
-                }
-            }
-            
-            if (redCount === 0 || !redHasMoves) {
-                gameOver = true;
-                winner = 'black';
-                showWinMessage('BLACK WINS!');
+            const redMoves = getAllValidMoves('red').length;
+            const blackMoves = getAllValidMoves('black').length;
+            if (redCount === 0 || redMoves === 0) {
+                showWin('black');
                 return true;
-            } else if (blackCount === 0 || !blackHasMoves) {
-                gameOver = true;
-                winner = 'red';
-                showWinMessage('RED WINS!');
+            } else if (blackCount === 0 || blackMoves === 0) {
+                showWin('red');
                 return true;
             }
             return false;
         }
-        
-        function showWinMessage(winnerName) {
-            const winDiv = document.getElementById('winMessage');
-            const winnerText = document.getElementById('winnerText');
-            winnerText.innerHTML = winnerName === 'RED WINS!' ? '🔴 RED WINS! 🔴' : '⚫ BLACK WINS! ⚫';
-            winDiv.style.display = 'block';
-        }
-        
-        function hideWinMessage() {
-            document.getElementById('winMessage').style.display = 'none';
+
+        // -------------------- MAKE MOVE (handles multiple jumps) --------------------
+        function makeMove(fr, fc, tr, tc, isAITurn = false) {
+            const piece = board[fr][fc];
+            const isJump = Math.abs(tr - fr) === 2;
+            if (isJump) {
+                const midRow = (fr + tr) / 2;
+                const midCol = (fc + tc) / 2;
+                const jumped = board[midRow][midCol];
+                board[midRow][midCol] = null;
+                if (jumped.color === 'red') redScore++;
+                else blackScore++;
+                updateUI();
+            }
+            board[tr][tc] = piece;
+            board[fr][fc] = null;
+            if ((piece.color === 'red' && tr === 0) || (piece.color === 'black' && tr === 7)) {
+                board[tr][tc].king = true;
+            }
+            renderPieces();
+
+            // check for additional jumps
+            const moreJumps = getValidMoves(tr, tc).filter(m => m.isJump);
+            if (moreJumps.length > 0 && isJump) {
+                mustJumpAgain = true;
+                jumpFromRow = tr;
+                jumpFromCol = tc;
+                selectedPiece = board[tr][tc];
+                selectedRow = tr;
+                selectedCol = tc;
+                showValidMoves(tr, tc);
+                return false;
+            }
+            mustJumpAgain = false;
+            currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
+            updateUI();
+            clearHighlights();
+            selectedPiece = null;
+            if (checkWin()) return true;
+            if (currentPlayer === 'black' && !gameOver) setTimeout(() => aiMove(), 200);
+            return true;
         }
 
+        // -------------------- AI MOVE (simple random with jumps priority) --------------------
+        function aiMove() {
+            if (gameOver || currentPlayer !== 'black') return;
+            const allMoves = getAllValidMoves('black');
+            if (allMoves.length === 0) return;
+            const jumps = allMoves.filter(m => m.to.isJump);
+            const move = jumps.length > 0 ? jumps[Math.floor(Math.random() * jumps.length)] : allMoves[Math.floor(Math.random() * allMoves.length)];
+            makeMove(move.from.row, move.from.col, move.to.row, move.to.col, true);
+            if (mustJumpAgain && currentPlayer === 'black') {
+                setTimeout(() => {
+                    if (mustJumpAgain && currentPlayer === 'black' && !gameOver) {
+                        const nextJumps = getValidMoves(jumpFromRow, jumpFromCol).filter(m => m.isJump);
+                        if (nextJumps.length > 0) {
+                            makeMove(jumpFromRow, jumpFromCol, nextJumps[0].row, nextJumps[0].col, true);
+                        }
+                    }
+                }, 300);
+            }
+        }
+
+        // -------------------- 3D RENDERING --------------------
         function createPiece(color, row, col, isKing) {
             const group = new THREE.Group();
             const pieceColor = color === 'red' ? redColor : blackColor;
@@ -245,32 +456,39 @@
         }
 
         function renderPieces() {
-            while (piecesGroup.children.length) piecesGroup.remove(piecesGroup.children[0]);
-            for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-                const p = board[r][c];
-                if (p) {
-                    const mesh = createPiece(p.color, r, c, p.king);
-                    mesh.userData = { row: r, col: c };
-                    piecesGroup.add(mesh);
+            while(piecesGroup.children.length) piecesGroup.remove(piecesGroup.children[0]);
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = board[r][c];
+                    if (p) {
+                        const mesh = createPiece(p.color, r, c, p.king);
+                        mesh.userData = { row: r, col: c };
+                        piecesGroup.add(mesh);
+                    }
                 }
             }
         }
 
         function createBoard3D() {
             const group = new THREE.Group();
-            for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-                const color = (r + c) % 2 === 0 ? lightColor : darkColor;
-                const square = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 0.85), new THREE.MeshStandardMaterial({ color: color, roughness: 0.4 }));
-                const x = (c - 3.5) * 0.85;
-                const z = (r - 3.5) * 0.85;
-                square.position.set(x, -0.04, z);
-                square.userData = { row: r, col: c };
-                group.add(square);
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const col = (r + c) % 2 === 0 ? lightColor : darkColor;
+                    const square = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 0.85), new THREE.MeshStandardMaterial({ color: col, roughness: 0.4 }));
+                    const x = (c - 3.5) * 0.85;
+                    const z = (r - 3.5) * 0.85;
+                    square.position.set(x, -0.04, z);
+                    square.userData = { row: r, col: c };
+                    group.add(square);
+                }
             }
             return group;
         }
 
-        function clearHighlights() { highlights.forEach(h => scene.remove(h)); highlights = []; }
+        function clearHighlights() {
+            highlights.forEach(h => scene.remove(h));
+            highlights = [];
+        }
 
         function showValidMoves(row, col) {
             clearHighlights();
@@ -285,185 +503,28 @@
             });
         }
 
-        function isValidNormal(fr, fc, tr, tc) {
-            const piece = board[fr][fc];
-            if (!piece) return false;
-            if (board[tr][tc]) return false;
-            const rowDiff = tr - fr, colDiff = Math.abs(tc - fc);
-            const direction = piece.color === 'red' ? -1 : 1;
-            if (Math.abs(rowDiff) !== 1 || colDiff !== 1) return false;
-            if (piece.king || rowDiff === direction) return true;
-            return false;
-        }
-
-        function isValidJump(fr, fc, tr, tc) {
-            const piece = board[fr][fc];
-            if (!piece) return false;
-            if (board[tr][tc]) return false;
-            const rowDiff = tr - fr, colDiff = Math.abs(tc - fc);
-            if (Math.abs(rowDiff) !== 2 || colDiff !== 2) return false;
-            const midRow = (fr + tr) / 2, midCol = (fc + tc) / 2;
-            const jumped = board[midRow][midCol];
-            if (jumped && jumped.color !== piece.color) return true;
-            return false;
-        }
-
-        function getValidMoves(row, col) {
-            const piece = board[row][col];
-            if (!piece) return [];
-            const moves = [];
-            const directions = piece.king ? [-1, 1] : [piece.color === 'red' ? -1 : 1];
-            for (const rd of directions) for (const cd of [-1, 1]) {
-                const jr = row + rd * 2, jc = col + cd * 2;
-                if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && isValidJump(row, col, jr, jc)) moves.push({ row: jr, col: jc, isJump: true });
+        // -------------------- INTERACTION (mouse + touch) --------------------
+        function getCanvasCoords(e) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            const scaleX = renderer.domElement.width / rect.width;
+            const scaleY = renderer.domElement.height / rect.height;
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+                e.preventDefault();
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
             }
-            if (moves.length === 0) {
-                for (const rd of directions) for (const cd of [-1, 1]) {
-                    const nr = row + rd, nc = col + cd;
-                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && isValidNormal(row, col, nr, nc)) moves.push({ row: nr, col: nc, isJump: false });
-                }
-            }
-            return moves;
-        }
-
-        function getAllJumpsFrom(row, col) {
-            const piece = board[row][col];
-            if (!piece) return [];
-            const jumps = [];
-            const directions = piece.king ? [-1, 1] : [piece.color === 'red' ? -1 : 1];
-            for (const rd of directions) for (const cd of [-1, 1]) {
-                const jr = row + rd * 2, jc = col + cd * 2;
-                if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && isValidJump(row, col, jr, jc)) {
-                    jumps.push({ row: jr, col: jc });
-                }
-            }
-            return jumps;
-        }
-
-        function makeMove(fr, fc, tr, tc, isAITurn = false) {
-            if (gameOver) return false;
-            
-            const piece = board[fr][fc];
-            const isJump = Math.abs(tr - fr) === 2;
-            
-            if (isJump) {
-                const midRow = (fr + tr) / 2, midCol = (fc + tc) / 2;
-                board[midRow][midCol] = null;
-            }
-            board[tr][tc] = piece;
-            board[fr][fc] = null;
-            if ((piece.color === 'red' && tr === 0) || (piece.color === 'black' && tr === 7)) board[tr][tc].king = true;
-            renderPieces();
-            
-            // Check win after move
-            if (checkWin()) return true;
-            
-            // Check for additional jumps from the new position
-            const moreJumps = getAllJumpsFrom(tr, tc);
-            if (moreJumps.length > 0 && isJump) {
-                mustJumpAgain = true;
-                jumpFromRow = tr;
-                jumpFromCol = tc;
-                selectedPiece = board[tr][tc];
-                selectedRow = tr;
-                selectedCol = tc;
-                showValidMoves(tr, tc);
-                return false; // Move not complete, same player continues
-            }
-            
-            mustJumpAgain = false;
-            jumpFromRow = null;
-            jumpFromCol = null;
-            
-            // Switch turn only if no further jumps
-            currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
-            updateTurnDisplay();
-            clearHighlights();
-            selectedPiece = null;
-            
-            // Check win again after switching turn (in case opponent has no moves)
-            checkWin();
-            
-            // If AI mode and it's black's turn and game not over, trigger AI
-            if (gameMode === 'ai' && currentPlayer === 'black' && !gameOver && !mustJumpAgain) {
-                setTimeout(() => aiMove(), 300);
-            }
-            return true;
-        }
-
-        // AI that continues jumping until no more jumps are available
-        function aiMove() {
-            if (gameOver || currentPlayer !== 'black') return;
-            
-            // Recursive function to perform all jumps in a turn
-            function makeAIMove(fromRow, fromCol) {
-                const jumps = getAllJumpsFrom(fromRow, fromCol);
-                if (jumps.length > 0) {
-                    const jump = jumps[0];
-                    const piece = board[fromRow][fromCol];
-                    const midRow = (fromRow + jump.row) / 2;
-                    const midCol = (fromCol + jump.col) / 2;
-                    board[midRow][midCol] = null;
-                    board[jump.row][jump.col] = piece;
-                    board[fromRow][fromCol] = null;
-                    if ((piece.color === 'red' && jump.row === 0) || (piece.color === 'black' && jump.row === 7)) board[jump.row][jump.col].king = true;
-                    renderPieces();
-                    makeAIMove(jump.row, jump.col);
-                }
-            }
-            
-            // Find all black pieces that can jump
-            let anyJump = false;
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    const piece = board[r][c];
-                    if (piece && piece.color === 'black') {
-                        const jumps = getAllJumpsFrom(r, c);
-                        if (jumps.length > 0) {
-                            anyJump = true;
-                            makeAIMove(r, c);
-                            break;
-                        }
-                    }
-                }
-                if (anyJump) break;
-            }
-            
-            if (!anyJump) {
-                // No jumps available, make a random normal move
-                let allMoves = [];
-                for (let r = 0; r < 8; r++) {
-                    for (let c = 0; c < 8; c++) {
-                        const piece = board[r][c];
-                        if (piece && piece.color === 'black') {
-                            const moves = getValidMoves(r, c);
-                            for (const m of moves) {
-                                if (!m.isJump) allMoves.push({ from: { row: r, col: c }, to: m });
-                            }
-                        }
-                    }
-                }
-                if (allMoves.length > 0) {
-                    const move = allMoves[Math.floor(Math.random() * allMoves.length)];
-                    makeMove(move.from.row, move.from.col, move.to.row, move.to.col, true);
-                }
-            }
-            
-            // After AI's turn, switch turn to red
-            if (!gameOver) {
-                currentPlayer = 'red';
-                updateTurnDisplay();
-                clearHighlights();
-                selectedPiece = null;
-                mustJumpAgain = false;
-                checkWin();
-            }
+            const canvasX = (clientX - rect.left) * scaleX;
+            const canvasY = (clientY - rect.top) * scaleY;
+            return { x: canvasX, y: canvasY };
         }
 
         function handleClick(row, col) {
             if (gameOver) return;
-            if (gameMode === 'ai' && currentPlayer !== 'red') return;
-            
+            if (currentPlayer !== 'red') return;
             if (mustJumpAgain) {
                 if (selectedPiece && isValidJump(selectedRow, selectedCol, row, col)) {
                     makeMove(selectedRow, selectedCol, row, col);
@@ -479,10 +540,9 @@
                 }
                 return;
             }
-            
             if (selectedPiece === null) {
                 const piece = board[row][col];
-                if (piece && piece.color === currentPlayer) {
+                if (piece && piece.color === 'red') {
                     const moves = getValidMoves(row, col);
                     if (moves.length > 0) {
                         selectedPiece = piece;
@@ -495,7 +555,7 @@
                     selectedPiece = null;
                 }
             } else {
-                const isValid = isValidJump(selectedRow, selectedCol, row, col) || isValidNormal(selectedRow, selectedCol, row, col);
+                const isValid = isValidJump(selectedRow, selectedCol, row, col) || isValidNormalMove(selectedRow, selectedCol, row, col);
                 if (isValid) {
                     makeMove(selectedRow, selectedCol, row, col);
                     if (!mustJumpAgain) {
@@ -514,56 +574,24 @@
             }
         }
 
-        function resetGame() {
-            gameOver = false;
-            winner = null;
-            initBoard();
-            renderPieces();
-            currentPlayer = 'red';
-            mustJumpAgain = false;
-            clearHighlights();
-            selectedPiece = null;
-            updateTurnDisplay();
-            hideWinMessage();
-        }
-
-        function updateTurnDisplay() {
-            if (gameOver) return;
-            if (gameMode === 'ai') {
-                document.getElementById('turnText').innerHTML = currentPlayer === 'red' ? '🔴 YOUR TURN' : '🤖 AI THINKING...';
-            } else {
-                document.getElementById('turnText').innerHTML = currentPlayer === 'red' ? '🔴 RED\'S TURN' : '⚫ BLACK\'S TURN';
-            }
-        }
-
-        function setAIMode() {
-            gameMode = 'ai';
-            document.getElementById('aiModeBtn').classList.add('mode-active');
-            document.getElementById('twoPlayerBtn').classList.remove('mode-active');
-            resetGame();
-        }
-
-        function setTwoPlayerMode() {
-            gameMode = 'twoPlayer';
-            document.getElementById('twoPlayerBtn').classList.add('mode-active');
-            document.getElementById('aiModeBtn').classList.remove('mode-active');
-            resetGame();
-        }
-
-        // Three.js initialization
-        function init() {
+        // -------------------- THREE.JS INIT --------------------
+        function initThree() {
             const canvas = document.getElementById('gameCanvas');
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x0a0a2a);
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(5, 6, 5.5);
-            renderer = new THREE.WebGLRenderer({ antialias: true, canvas: canvas });
+            renderer = new THREE.WebGLRenderer({ antialias: true, canvas });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
+            controls.rotateSpeed = 0.8;
+            controls.zoomSpeed = 1.0;
+            controls.enableZoom = true;
+            controls.enablePan = true;
             controls.target.set(0, 0.3, 0);
-            
+            // Lighting
             const ambient = new THREE.AmbientLight(0x404060);
             scene.add(ambient);
             const main = new THREE.DirectionalLight(0xffffff, 1);
@@ -573,21 +601,20 @@
             const fill = new THREE.PointLight(0x4466cc, 0.3);
             fill.position.set(-2, 3, 4);
             scene.add(fill);
-            
             scene.add(createBoard3D());
             piecesGroup = new THREE.Group();
             scene.add(piecesGroup);
-            
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
-            
+            // Click / touch handler
             renderer.domElement.addEventListener('click', (e) => {
-                const rect = renderer.domElement.getBoundingClientRect();
-                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                if (gameOver) return;
+                const coords = getCanvasCoords(e);
+                mouse.x = (coords.x / renderer.domElement.width) * 2 - 1;
+                mouse.y = -(coords.y / renderer.domElement.height) * 2 + 1;
                 raycaster.setFromCamera(mouse, camera);
-                const hits = raycaster.intersectObjects(scene.children, true);
-                for (let hit of hits) {
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                for (let hit of intersects) {
                     let obj = hit.object;
                     while (obj) {
                         if (obj.userData && obj.userData.row !== undefined) {
@@ -598,17 +625,30 @@
                     }
                 }
             });
-            
+            renderer.domElement.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (gameOver) return;
+                const coords = getCanvasCoords(e);
+                mouse.x = (coords.x / renderer.domElement.width) * 2 - 1;
+                mouse.y = -(coords.y / renderer.domElement.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                for (let hit of intersects) {
+                    let obj = hit.object;
+                    while (obj) {
+                        if (obj.userData && obj.userData.row !== undefined) {
+                            handleClick(obj.userData.row, obj.userData.col);
+                            return;
+                        }
+                        obj = obj.parent;
+                    }
+                }
+            }, { passive: false });
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
             });
-            
-            document.getElementById('resetBtn').addEventListener('click', () => resetGame());
-            document.getElementById('aiModeBtn').addEventListener('click', setAIMode);
-            document.getElementById('twoPlayerBtn').addEventListener('click', setTwoPlayerMode);
-            
             function animate() {
                 requestAnimationFrame(animate);
                 controls.update();
@@ -617,13 +657,13 @@
             animate();
         }
 
+        resetBtn.addEventListener('click', () => resetGame());
+        playAgainBtn.addEventListener('click', () => resetGame());
+
         initBoard();
-        init();
+        initThree();
         renderPieces();
-        updateTurnDisplay();
-        
-        // Expose resetGame to global for the Play Again button
-        window.resetGame = resetGame;
+        updateUI();
     </script>
 </body>
 </html>
