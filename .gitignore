@@ -1,0 +1,4 @@
+node_modules/
+magnar.db
+.DS_Store
+*.log

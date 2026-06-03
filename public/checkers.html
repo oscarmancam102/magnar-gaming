@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Checkers - Magnar Gaming</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: linear-gradient(135deg, #0a0f1e, #0a1a2e); overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        canvas { width: 100%; height: 100%; display: block; cursor: pointer; }
+        
+        /* Top bar */
+        .top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .mode-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .mode-buttons button {
+            background: #00adb5;
+            color: #1a1a2e;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .mode-buttons button.mode-active {
+            background: #ffd700;
+            color: #1a1a2e;
+            box-shadow: 0 0 10px rgba(255,215,0,0.5);
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-buttons button {
+            background: #ff4757;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .back-btn {
+            background: #00adb5;
+            color: #1a1a2e;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .turn-text {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 10px 24px;
+            border-radius: 40px;
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 1.1rem;
+            pointer-events: none;
+            z-index: 100;
+            white-space: nowrap;
+        }
+        
+        .win-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 30px 50px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 200;
+            display: none;
+            border: 2px solid #ffd700;
+        }
+        
+        .win-message h2 {
+            color: #ffd700;
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+        
+        .win-message button {
+            background: #00adb5;
+            color: #1a1a2e;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .top-bar { padding: 10px; }
+            .mode-buttons button, .control-buttons button, .back-btn { padding: 6px 12px; font-size: 0.8rem; }
+            .turn-text { top: 70px; font-size: 0.9rem; white-space: nowrap; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="top-bar">
+        <div class="mode-buttons">
+            <button id="aiModeBtn" class="mode-active">🤖 VS AI</button>
+            <button id="twoPlayerBtn">👥 2 PLAYER</button>
+        </div>
+        <div class="control-buttons">
+            <button id="resetBtn">🔄 New Game</button>
+            <button class="back-btn" onclick="window.close()">← Back</button>
+        </div>
+    </div>
+    
+    <div class="turn-text" id="turnText">🔴 RED'S TURN</div>
+    
+    <div id="winMessage" class="win-message">
+        <h2 id="winnerText">🏆 RED WINS! 🏆</h2>
+        <button onclick="resetGame()">Play Again</button>
+    </div>
+
+    <script type="importmap">
+        {"imports":{"three":"https://unpkg.com/three@0.128.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.128.0/examples/jsm/"}}
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let board = Array(8).fill().map(() => Array(8).fill(null));
+        let currentPlayer = 'red';
+        let gameMode = 'ai'; // 'ai' or 'twoPlayer'
+        let gameOver = false;
+        let winner = null;
+        let selectedPiece = null;
+        let selectedRow = null, selectedCol = null;
+        let mustJumpAgain = false;
+        let jumpFromRow = null, jumpFromCol = null;
+        let scene, camera, renderer, controls, piecesGroup, raycaster, mouse, highlights = [];
+        
+        const lightColor = 0xf0d9b5, darkColor = 0xb58863, redColor = 0xe74c3c, blackColor = 0x2c3e50;
+
+        function initBoard() {
+            board = Array(8).fill().map(() => Array(8).fill(null));
+            for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) board[r][c] = { color: 'black', king: false };
+            for (let r = 5; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) board[r][c] = { color: 'red', king: false };
+        }
+
+        // Check win condition
+        function checkWin() {
+            let redCount = 0, blackCount = 0;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = board[r][c];
+                    if (piece) {
+                        if (piece.color === 'red') redCount++;
+                        else blackCount++;
+                    }
+                }
+            }
+            
+            // Also check if current player has any legal moves (stalemate)
+            let redHasMoves = false, blackHasMoves = false;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = board[r][c];
+                    if (piece && piece.color === 'red' && getValidMoves(r, c).length > 0) redHasMoves = true;
+                    if (piece && piece.color === 'black' && getValidMoves(r, c).length > 0) blackHasMoves = true;
+                }
+            }
+            
+            if (redCount === 0 || !redHasMoves) {
+                gameOver = true;
+                winner = 'black';
+                showWinMessage('BLACK WINS!');
+                return true;
+            } else if (blackCount === 0 || !blackHasMoves) {
+                gameOver = true;
+                winner = 'red';
+                showWinMessage('RED WINS!');
+                return true;
+            }
+            return false;
+        }
+        
+        function showWinMessage(winnerName) {
+            const winDiv = document.getElementById('winMessage');
+            const winnerText = document.getElementById('winnerText');
+            winnerText.innerHTML = winnerName === 'RED WINS!' ? '🔴 RED WINS! 🔴' : '⚫ BLACK WINS! ⚫';
+            winDiv.style.display = 'block';
+        }
+        
+        function hideWinMessage() {
+            document.getElementById('winMessage').style.display = 'none';
+        }
+
+        function createPiece(color, row, col, isKing) {
+            const group = new THREE.Group();
+            const pieceColor = color === 'red' ? redColor : blackColor;
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.35, 0.2, 32), new THREE.MeshStandardMaterial({ color: pieceColor, metalness: 0.6 }));
+            body.position.y = 0.1;
+            group.add(body);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.04, 32, 64), new THREE.MeshStandardMaterial({ color: color === 'red' ? 0xff6666 : 0x5588ff, metalness: 0.8 }));
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.22;
+            group.add(ring);
+            if (isKing) {
+                const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.12, 8), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9 }));
+                crown.position.y = 0.32;
+                group.add(crown);
+            }
+            const x = (col - 3.5) * 0.85;
+            const z = (row - 3.5) * 0.85;
+            group.position.set(x, 0, z);
+            return group;
+        }
+
+        function renderPieces() {
+            while (piecesGroup.children.length) piecesGroup.remove(piecesGroup.children[0]);
+            for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+                const p = board[r][c];
+                if (p) {
+                    const mesh = createPiece(p.color, r, c, p.king);
+                    mesh.userData = { row: r, col: c };
+                    piecesGroup.add(mesh);
+                }
+            }
+        }
+
+        function createBoard3D() {
+            const group = new THREE.Group();
+            for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+                const color = (r + c) % 2 === 0 ? lightColor : darkColor;
+                const square = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 0.85), new THREE.MeshStandardMaterial({ color: color, roughness: 0.4 }));
+                const x = (c - 3.5) * 0.85;
+                const z = (r - 3.5) * 0.85;
+                square.position.set(x, -0.04, z);
+                square.userData = { row: r, col: c };
+                group.add(square);
+            }
+            return group;
+        }
+
+        function clearHighlights() { highlights.forEach(h => scene.remove(h)); highlights = []; }
+
+        function showValidMoves(row, col) {
+            clearHighlights();
+            const moves = getValidMoves(row, col);
+            moves.forEach(m => {
+                const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24), new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00aa44, transparent: true, opacity: 0.8 }));
+                const x = (m.col - 3.5) * 0.85;
+                const z = (m.row - 3.5) * 0.85;
+                sphere.position.set(x, 0.08, z);
+                scene.add(sphere);
+                highlights.push(sphere);
+            });
+        }
+
+        function isValidNormal(fr, fc, tr, tc) {
+            const piece = board[fr][fc];
+            if (!piece) return false;
+            if (board[tr][tc]) return false;
+            const rowDiff = tr - fr, colDiff = Math.abs(tc - fc);
+            const direction = piece.color === 'red' ? -1 : 1;
+            if (Math.abs(rowDiff) !== 1 || colDiff !== 1) return false;
+            if (piece.king || rowDiff === direction) return true;
+            return false;
+        }
+
+        function isValidJump(fr, fc, tr, tc) {
+            const piece = board[fr][fc];
+            if (!piece) return false;
+            if (board[tr][tc]) return false;
+            const rowDiff = tr - fr, colDiff = Math.abs(tc - fc);
+            if (Math.abs(rowDiff) !== 2 || colDiff !== 2) return false;
+            const midRow = (fr + tr) / 2, midCol = (fc + tc) / 2;
+            const jumped = board[midRow][midCol];
+            if (jumped && jumped.color !== piece.color) return true;
+            return false;
+        }
+
+        function getValidMoves(row, col) {
+            const piece = board[row][col];
+            if (!piece) return [];
+            const moves = [];
+            const directions = piece.king ? [-1, 1] : [piece.color === 'red' ? -1 : 1];
+            for (const rd of directions) for (const cd of [-1, 1]) {
+                const jr = row + rd * 2, jc = col + cd * 2;
+                if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && isValidJump(row, col, jr, jc)) moves.push({ row: jr, col: jc, isJump: true });
+            }
+            if (moves.length === 0) {
+                for (const rd of directions) for (const cd of [-1, 1]) {
+                    const nr = row + rd, nc = col + cd;
+                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && isValidNormal(row, col, nr, nc)) moves.push({ row: nr, col: nc, isJump: false });
+                }
+            }
+            return moves;
+        }
+
+        function getAllJumpsFrom(row, col) {
+            const piece = board[row][col];
+            if (!piece) return [];
+            const jumps = [];
+            const directions = piece.king ? [-1, 1] : [piece.color === 'red' ? -1 : 1];
+            for (const rd of directions) for (const cd of [-1, 1]) {
+                const jr = row + rd * 2, jc = col + cd * 2;
+                if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && isValidJump(row, col, jr, jc)) {
+                    jumps.push({ row: jr, col: jc });
+                }
+            }
+            return jumps;
+        }
+
+        function makeMove(fr, fc, tr, tc, isAITurn = false) {
+            if (gameOver) return false;
+            
+            const piece = board[fr][fc];
+            const isJump = Math.abs(tr - fr) === 2;
+            
+            if (isJump) {
+                const midRow = (fr + tr) / 2, midCol = (fc + tc) / 2;
+                board[midRow][midCol] = null;
+            }
+            board[tr][tc] = piece;
+            board[fr][fc] = null;
+            if ((piece.color === 'red' && tr === 0) || (piece.color === 'black' && tr === 7)) board[tr][tc].king = true;
+            renderPieces();
+            
+            // Check win after move
+            if (checkWin()) return true;
+            
+            // Check for additional jumps from the new position
+            const moreJumps = getAllJumpsFrom(tr, tc);
+            if (moreJumps.length > 0 && isJump) {
+                mustJumpAgain = true;
+                jumpFromRow = tr;
+                jumpFromCol = tc;
+                selectedPiece = board[tr][tc];
+                selectedRow = tr;
+                selectedCol = tc;
+                showValidMoves(tr, tc);
+                return false; // Move not complete, same player continues
+            }
+            
+            mustJumpAgain = false;
+            jumpFromRow = null;
+            jumpFromCol = null;
+            
+            // Switch turn only if no further jumps
+            currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
+            updateTurnDisplay();
+            clearHighlights();
+            selectedPiece = null;
+            
+            // Check win again after switching turn (in case opponent has no moves)
+            checkWin();
+            
+            // If AI mode and it's black's turn and game not over, trigger AI
+            if (gameMode === 'ai' && currentPlayer === 'black' && !gameOver && !mustJumpAgain) {
+                setTimeout(() => aiMove(), 300);
+            }
+            return true;
+        }
+
+        // AI that continues jumping until no more jumps are available
+        function aiMove() {
+            if (gameOver || currentPlayer !== 'black') return;
+            
+            // Recursive function to perform all jumps in a turn
+            function makeAIMove(fromRow, fromCol) {
+                const jumps = getAllJumpsFrom(fromRow, fromCol);
+                if (jumps.length > 0) {
+                    const jump = jumps[0];
+                    const piece = board[fromRow][fromCol];
+                    const midRow = (fromRow + jump.row) / 2;
+                    const midCol = (fromCol + jump.col) / 2;
+                    board[midRow][midCol] = null;
+                    board[jump.row][jump.col] = piece;
+                    board[fromRow][fromCol] = null;
+                    if ((piece.color === 'red' && jump.row === 0) || (piece.color === 'black' && jump.row === 7)) board[jump.row][jump.col].king = true;
+                    renderPieces();
+                    makeAIMove(jump.row, jump.col);
+                }
+            }
+            
+            // Find all black pieces that can jump
+            let anyJump = false;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = board[r][c];
+                    if (piece && piece.color === 'black') {
+                        const jumps = getAllJumpsFrom(r, c);
+                        if (jumps.length > 0) {
+                            anyJump = true;
+                            makeAIMove(r, c);
+                            break;
+                        }
+                    }
+                }
+                if (anyJump) break;
+            }
+            
+            if (!anyJump) {
+                // No jumps available, make a random normal move
+                let allMoves = [];
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        const piece = board[r][c];
+                        if (piece && piece.color === 'black') {
+                            const moves = getValidMoves(r, c);
+                            for (const m of moves) {
+                                if (!m.isJump) allMoves.push({ from: { row: r, col: c }, to: m });
+                            }
+                        }
+                    }
+                }
+                if (allMoves.length > 0) {
+                    const move = allMoves[Math.floor(Math.random() * allMoves.length)];
+                    makeMove(move.from.row, move.from.col, move.to.row, move.to.col, true);
+                }
+            }
+            
+            // After AI's turn, switch turn to red
+            if (!gameOver) {
+                currentPlayer = 'red';
+                updateTurnDisplay();
+                clearHighlights();
+                selectedPiece = null;
+                mustJumpAgain = false;
+                checkWin();
+            }
+        }
+
+        function handleClick(row, col) {
+            if (gameOver) return;
+            if (gameMode === 'ai' && currentPlayer !== 'red') return;
+            
+            if (mustJumpAgain) {
+                if (selectedPiece && isValidJump(selectedRow, selectedCol, row, col)) {
+                    makeMove(selectedRow, selectedCol, row, col);
+                    if (!mustJumpAgain) {
+                        selectedPiece = null;
+                        clearHighlights();
+                    } else {
+                        selectedRow = row;
+                        selectedCol = col;
+                        selectedPiece = board[row][col];
+                        showValidMoves(row, col);
+                    }
+                }
+                return;
+            }
+            
+            if (selectedPiece === null) {
+                const piece = board[row][col];
+                if (piece && piece.color === currentPlayer) {
+                    const moves = getValidMoves(row, col);
+                    if (moves.length > 0) {
+                        selectedPiece = piece;
+                        selectedRow = row;
+                        selectedCol = col;
+                        showValidMoves(row, col);
+                    }
+                } else {
+                    clearHighlights();
+                    selectedPiece = null;
+                }
+            } else {
+                const isValid = isValidJump(selectedRow, selectedCol, row, col) || isValidNormal(selectedRow, selectedCol, row, col);
+                if (isValid) {
+                    makeMove(selectedRow, selectedCol, row, col);
+                    if (!mustJumpAgain) {
+                        clearHighlights();
+                        selectedPiece = null;
+                    } else {
+                        selectedRow = row;
+                        selectedCol = col;
+                        selectedPiece = board[row][col];
+                        showValidMoves(row, col);
+                    }
+                } else {
+                    clearHighlights();
+                    selectedPiece = null;
+                }
+            }
+        }
+
+        function resetGame() {
+            gameOver = false;
+            winner = null;
+            initBoard();
+            renderPieces();
+            currentPlayer = 'red';
+            mustJumpAgain = false;
+            clearHighlights();
+            selectedPiece = null;
+            updateTurnDisplay();
+            hideWinMessage();
+        }
+
+        function updateTurnDisplay() {
+            if (gameOver) return;
+            if (gameMode === 'ai') {
+                document.getElementById('turnText').innerHTML = currentPlayer === 'red' ? '🔴 YOUR TURN' : '🤖 AI THINKING...';
+            } else {
+                document.getElementById('turnText').innerHTML = currentPlayer === 'red' ? '🔴 RED\'S TURN' : '⚫ BLACK\'S TURN';
+            }
+        }
+
+        function setAIMode() {
+            gameMode = 'ai';
+            document.getElementById('aiModeBtn').classList.add('mode-active');
+            document.getElementById('twoPlayerBtn').classList.remove('mode-active');
+            resetGame();
+        }
+
+        function setTwoPlayerMode() {
+            gameMode = 'twoPlayer';
+            document.getElementById('twoPlayerBtn').classList.add('mode-active');
+            document.getElementById('aiModeBtn').classList.remove('mode-active');
+            resetGame();
+        }
+
+        // Three.js initialization
+        function init() {
+            const canvas = document.getElementById('gameCanvas');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a2a);
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(5, 6, 5.5);
+            renderer = new THREE.WebGLRenderer({ antialias: true, canvas: canvas });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0.3, 0);
+            
+            const ambient = new THREE.AmbientLight(0x404060);
+            scene.add(ambient);
+            const main = new THREE.DirectionalLight(0xffffff, 1);
+            main.position.set(5, 10, 7);
+            main.castShadow = true;
+            scene.add(main);
+            const fill = new THREE.PointLight(0x4466cc, 0.3);
+            fill.position.set(-2, 3, 4);
+            scene.add(fill);
+            
+            scene.add(createBoard3D());
+            piecesGroup = new THREE.Group();
+            scene.add(piecesGroup);
+            
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            renderer.domElement.addEventListener('click', (e) => {
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const hits = raycaster.intersectObjects(scene.children, true);
+                for (let hit of hits) {
+                    let obj = hit.object;
+                    while (obj) {
+                        if (obj.userData && obj.userData.row !== undefined) {
+                            handleClick(obj.userData.row, obj.userData.col);
+                            return;
+                        }
+                        obj = obj.parent;
+                    }
+                }
+            });
+            
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            document.getElementById('resetBtn').addEventListener('click', () => resetGame());
+            document.getElementById('aiModeBtn').addEventListener('click', setAIMode);
+            document.getElementById('twoPlayerBtn').addEventListener('click', setTwoPlayerMode);
+            
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        initBoard();
+        init();
+        renderPieces();
+        updateTurnDisplay();
+        
+        // Expose resetGame to global for the Play Again button
+        window.resetGame = resetGame;
+    </script>
+</body>
+</html>
