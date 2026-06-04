@@ -1,56 +1,30 @@
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
+const { Pool } = require('pg');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*", methods: ["GET", "POST"] }
+});
+
 const PORT = process.env.PORT || 3000;
-const SECRET_KEY = process.env.SECRET_KEY || 'a_strong_random_secret_key_change_me';
+const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key-change-it';
+
+// PostgreSQL connection (uses Render's DATABASE_URL env var)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
-
-// ---------- Database (using new built-in module) ----------
-const db = new DatabaseSync('./magnar.db');
-
-// Create tables (using exec for multiple statements)
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    email TEXT UNIQUE,
-    password TEXT,
-    plan TEXT DEFAULT 'free',
-    chips INTEGER DEFAULT 0,
-    total_winnings INTEGER DEFAULT 0,
-    tournaments_played INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS tournaments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    game TEXT,
-    prize_pool INTEGER,
-    max_players INTEGER,
-    current_players INTEGER DEFAULT 1,
-    entry_fee INTEGER,
-    status TEXT DEFAULT 'open',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS tournament_participants (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tournament_id INTEGER,
-    user_id INTEGER,
-    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
-console.log('✅ Database initialized');
 
 // ---------- Helper functions ----------
 function generateToken(user) {
@@ -67,46 +41,80 @@ function verifyToken(req, res, next) {
   });
 }
 
-// ---------- Sample tournaments ----------
-function addSampleTournaments() {
-  const count = db.prepare('SELECT COUNT(*) as count FROM tournaments').get();
-  if (count.count === 0) {
+// ---------- Database setup ----------
+async function initDB() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE,
+        email TEXT UNIQUE,
+        password TEXT,
+        plan TEXT DEFAULT 'free',
+        chips INTEGER DEFAULT 0,
+        total_winnings INTEGER DEFAULT 0,
+        tournaments_played INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS tournaments (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        game TEXT,
+        prize_pool INTEGER,
+        max_players INTEGER,
+        current_players INTEGER DEFAULT 1,
+        entry_fee INTEGER,
+        status TEXT DEFAULT 'open',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS tournament_participants (
+        id SERIAL PRIMARY KEY,
+        tournament_id INTEGER,
+        user_id INTEGER,
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Database ready');
+  } finally {
+    client.release();
+  }
+}
+
+async function addSampleTournaments() {
+  const result = await pool.query('SELECT COUNT(*) FROM tournaments');
+  if (parseInt(result.rows[0].count) === 0) {
     const samples = [
-      { name: 'Checkers Championship', game: 'checkers', prize_pool: 2500, max_players: 32, entry_fee: 50 },
-      { name: '8‑Ball Pool Masters', game: 'pool', prize_pool: 5000, max_players: 16, entry_fee: 100 },
-      { name: 'Racing Grand Prix', game: 'racing', prize_pool: 3000, max_players: 12, entry_fee: 75 }
+      ['Checkers Championship', 'checkers', 2500, 32, 50],
+      ['8-Ball Pool Masters', 'pool', 5000, 16, 100],
+      ['Racing Grand Prix', 'racing', 3000, 12, 75]
     ];
-    const insert = db.prepare(`INSERT INTO tournaments (name, game, prize_pool, max_players, entry_fee) VALUES (?, ?, ?, ?, ?)`);
     for (const t of samples) {
-      insert.run(t.name, t.game, t.prize_pool, t.max_players, t.entry_fee);
+      await pool.query(
+        `INSERT INTO tournaments (name, game, prize_pool, max_players, entry_fee) VALUES ($1, $2, $3, $4, $5)`,
+        t
+      );
     }
     console.log('🏆 Sample tournaments added');
   }
 }
-addSampleTournaments();
 
-// ---------- Auth routes ----------
+// ---------- API Routes ----------
 app.post('/api/register', async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const insert = db.prepare(`INSERT INTO users (username, email, password) VALUES (?, ?, ?)`);
-    const info = insert.run(username, email, hashedPassword);
-    const token = generateToken({ id: info.lastInsertRowid, username });
-    res.json({
-      token,
-      user: {
-        id: info.lastInsertRowid,
-        username,
-        email,
-        chips: 0,
-        total_winnings: 0,
-        tournaments_played: 0
-      }
-    });
+    const hashed = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      `INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id`,
+      [username, email, hashed]
+    );
+    const token = generateToken({ id: result.rows[0].id, username });
+    res.json({ token, user: { id: result.rows[0].id, username, email, chips: 0, total_winnings: 0, tournaments_played: 0 } });
   } catch (err) {
-    if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'Username or email already exists' });
+    if (err.constraint === 'users_username_key' || err.constraint === 'users_email_key') {
+      return res.status(400).json({ error: 'Username or email already exists' });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -114,10 +122,11 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  const user = db.prepare(`SELECT * FROM users WHERE email = ?`).get(email);
+  const result = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
+  const user = result.rows[0];
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-  const validPassword = await bcrypt.compare(password, user.password);
-  if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
   const token = generateToken(user);
   res.json({
     token,
@@ -132,28 +141,43 @@ app.post('/api/login', async (req, res) => {
   });
 });
 
-app.get('/api/user', verifyToken, (req, res) => {
-  const user = db.prepare(`SELECT id, username, email, plan, chips, total_winnings, tournaments_played FROM users WHERE id = ?`).get(req.user.id);
+app.get('/api/user', verifyToken, async (req, res) => {
+  const result = await pool.query(
+    `SELECT id, username, email, plan, chips, total_winnings, tournaments_played FROM users WHERE id = $1`,
+    [req.user.id]
+  );
+  const user = result.rows[0];
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(user);
 });
 
-app.get('/api/tournaments', (req, res) => {
-  const tournaments = db.prepare(`SELECT * FROM tournaments WHERE status = 'open'`).all();
-  res.json(tournaments || []);
+app.get('/api/tournaments', async (req, res) => {
+  const result = await pool.query(`SELECT * FROM tournaments WHERE status = 'open'`);
+  res.json(result.rows);
 });
 
-// ---------- Health check endpoint (for Render) ----------
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
+// Health check
+app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// ---------- Main site fallback ----------
+// ---------- Socket.IO (multiplayer) ----------
+// Keep your existing room/move handlers here (if any)
+// If you don't have them yet, that's fine – we'll add later.
+
+// ---------- Catch‑all: serve index.html for any other route ----------
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ---------- Start server ----------
-app.listen(PORT, () => {
-  console.log(`🚀 Magnar Gaming server running on port ${PORT}`);
+async function start() {
+  await initDB();
+  await addSampleTournaments();
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+}
+
+start().catch(err => {
+  console.error('Failed to start:', err);
+  process.exit(1);
 });
