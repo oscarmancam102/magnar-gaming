@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Table Hockey - Solid Goal Posts | Magnar Gaming</title>
+    <style>
+        * {
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(135deg, #0a2a3a, #0a1a2a);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', monospace;
+        }
+        .game-container {
+            background: #1e2a2e;
+            border-radius: 32px;
+            padding: 20px;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.5);
+            border: 1px solid #e0a44c;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 16px;
+            box-shadow: 0 0 0 4px #5a3a22, 0 0 0 8px #1f140a;
+            cursor: none;
+            touch-action: none;
+        }
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 18px;
+            gap: 15px;
+            flex-wrap: wrap;
+            background: #0f1a1fcc;
+            backdrop-filter: blur(8px);
+            padding: 8px 20px;
+            border-radius: 60px;
+        }
+        .score {
+            font-weight: bold;
+            font-size: 1.5rem;
+            background: #000000aa;
+            padding: 5px 20px;
+            border-radius: 40px;
+            color: #ffd700;
+        }
+        .score span {
+            color: white;
+            margin: 0 8px;
+        }
+        .timer {
+            font-family: monospace;
+            font-weight: bold;
+            background: #2c1a10;
+            padding: 5px 16px;
+            border-radius: 40px;
+            color: #f0bc6e;
+            font-size: 1.3rem;
+        }
+        button {
+            background: #e09d32;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 60px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:active {
+            transform: scale(0.96);
+        }
+        .mode-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .mode-btn {
+            background: #2c4f6e;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 30px;
+            font-weight: bold;
+        }
+        .mode-btn.active {
+            background: #e09d32;
+            color: #1e2a1f;
+        }
+        .controls-hint {
+            font-size: 0.7rem;
+            background: #000000aa;
+            padding: 5px 12px;
+            border-radius: 30px;
+        }
+        .win-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            color: #ffd700;
+            padding: 20px 40px;
+            border-radius: 30px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            text-align: center;
+            z-index: 20;
+            display: none;
+            backdrop-filter: blur(10px);
+            border: 2px solid gold;
+            white-space: nowrap;
+        }
+        .pause-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7);
+            color: #ffaa33;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 15;
+            display: none;
+        }
+        @media (max-width: 700px) {
+            .score { font-size: 1rem; padding: 4px 12px; }
+            .timer { font-size: 1rem; padding: 4px 12px; }
+            .mode-btn { padding: 4px 12px; font-size: 0.7rem; }
+            .controls-hint { font-size: 0.6rem; }
+            .win-message { font-size: 1.2rem; padding: 12px 24px; white-space: nowrap; }
+            .pause-overlay { font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <canvas id="hockeyCanvas" width="800" height="500" tabindex="0"></canvas>
+    <div class="info-panel">
+        <div class="mode-buttons">
+            <button id="aiModeBtn" class="mode-btn active">🤖 VS AI</button>
+            <button id="twoPlayerBtn" class="mode-btn">👥 2 PLAYER</button>
+        </div>
+        <div class="score">
+            🔴 <span id="scoreLeft">0</span> &nbsp;|&nbsp; <span id="scoreRight">0</span> 🔵
+        </div>
+        <div class="timer">⏱️ <span id="timerDisplay">60</span> s</div>
+        <div class="controls-hint">
+            🖱️ Touch/Click &nbsp; RED: W/S &nbsp; BLUE: ↑/↓
+        </div>
+        <button id="resetBtn">🔄 New Game</button>
+    </div>
+    <div id="winMessage" class="win-message"></div>
+    <div id="pauseOverlay" class="pause-overlay">⏸️ GOAL! RESUME IN 3s</div>
+</div>
+
+<script>
+    (function(){
+        const canvas = document.getElementById('hockeyCanvas');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width = 800;
+        const H = canvas.height = 500;
+
+        let gameMode = 'ai';
+
+        // Paddles – slightly larger and rounded
+        const PADDLE_W = 18;
+        const PADDLE_H = 85;
+        let leftY = H/2 - PADDLE_H/2;
+        let rightY = H/2 - PADDLE_H/2;
+
+        // Puck
+        let puck = { x: W/2, y: H/2, vx: 0, vy: 0, r: 8 };
+        let leftScore = 0, rightScore = 0;
+
+        // Keyboard flags
+        let leftUp = false, leftDown = false;
+        let rightUp = false, rightDown = false;
+
+        // Touch
+        let leftTouchY = null;
+        let rightTouchY = null;
+
+        // AI speed
+        const AI_SPEED = 5.0;
+        const PADDLE_SPEED = 7;
+        const MAX_PUCK_SPEED = 16;
+        const ACC = 0.9;
+        const FRICTION = 1.0;
+
+        // Timer
+        let timeLeft = 60;
+        let timerInterval = null;
+        let gameActive = true;
+        let goalPause = false;
+        let pauseTimer = null;
+
+        // Goal opening dimensions (middle 90px)
+        const GOAL_Y_TOP = H/2 - 45;
+        const GOAL_Y_BOTTOM = H/2 + 45;
+
+        // DOM elements
+        const scoreLeftSpan = document.getElementById('scoreLeft');
+        const scoreRightSpan = document.getElementById('scoreRight');
+        const timerDisplaySpan = document.getElementById('timerDisplay');
+        const resetBtn = document.getElementById('resetBtn');
+        const aiModeBtn = document.getElementById('aiModeBtn');
+        const twoPlayerBtn = document.getElementById('twoPlayerBtn');
+        const winMessageDiv = document.getElementById('winMessage');
+        const pauseOverlay = document.getElementById('pauseOverlay');
+
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function startTimer() {
+            stopTimer();
+            timerInterval = setInterval(() => {
+                if (!gameActive || goalPause) return;
+                if (timeLeft <= 1) {
+                    timeLeft = 0;
+                    timerDisplaySpan.innerText = '0';
+                    gameActive = false;
+                    stopTimer();
+                    determineWinner();
+                } else {
+                    timeLeft--;
+                    timerDisplaySpan.innerText = timeLeft;
+                }
+            }, 1000);
+        }
+
+        function determineWinner() {
+            if (leftScore > rightScore) {
+                winMessageDiv.innerHTML = '🏆 RED WINS! 🏆';
+            } else if (rightScore > leftScore) {
+                winMessageDiv.innerHTML = '🏆 BLUE WINS! 🏆';
+            } else {
+                winMessageDiv.innerHTML = '🤝 DRAW! 🤝';
+            }
+            winMessageDiv.style.display = 'block';
+        }
+
+        function updateScoresUI() {
+            scoreLeftSpan.innerText = leftScore;
+            scoreRightSpan.innerText = rightScore;
+        }
+
+        function startGoalPause() {
+            if (pauseTimer) clearTimeout(pauseTimer);
+            goalPause = true;
+            pauseOverlay.style.display = 'block';
+            puck.vx = 0;
+            puck.vy = 0;
+            pauseTimer = setTimeout(() => {
+                goalPause = false;
+                pauseOverlay.style.display = 'none';
+                resetPuck();
+            }, 3000);
+        }
+
+        function resetPuck() {
+            puck.x = W/2;
+            puck.y = H/2;
+            let serveSpeed = 6 + Math.random() * 3;
+            let dirX = Math.random() > 0.5 ? serveSpeed : -serveSpeed;
+            let dirY = (Math.random() - 0.5) * 3;
+            puck.vx = dirX;
+            puck.vy = dirY;
+        }
+
+        function resetGame() {
+            stopTimer();
+            if (pauseTimer) clearTimeout(pauseTimer);
+            goalPause = false;
+            pauseOverlay.style.display = 'none';
+            leftScore = 0;
+            rightScore = 0;
+            timeLeft = 60;
+            gameActive = true;
+            winMessageDiv.style.display = 'none';
+            updateScoresUI();
+            timerDisplaySpan.innerText = timeLeft;
+            leftY = H/2 - PADDLE_H/2;
+            rightY = H/2 - PADDLE_H/2;
+            resetPuck();
+            leftUp = false; leftDown = false;
+            rightUp = false; rightDown = false;
+            leftTouchY = null; rightTouchY = null;
+            startTimer();
+        }
+
+        function update() {
+            if (!gameActive || goalPause) return;
+
+            // Left paddle
+            if (leftUp) leftY -= PADDLE_SPEED;
+            if (leftDown) leftY += PADDLE_SPEED;
+            if (leftTouchY !== null) leftY = leftTouchY - PADDLE_H/2;
+            leftY = clamp(leftY, 0, H - PADDLE_H);
+
+            // Right paddle
+            if (gameMode === 'twoPlayer') {
+                if (rightUp) rightY -= PADDLE_SPEED;
+                if (rightDown) rightY += PADDLE_SPEED;
+                if (rightTouchY !== null) rightY = rightTouchY - PADDLE_H/2;
+            } else {
+                const targetY = puck.y - PADDLE_H/2;
+                const diff = targetY - rightY;
+                rightY += Math.sign(diff) * Math.min(AI_SPEED, Math.abs(diff));
+            }
+            rightY = clamp(rightY, 0, H - PADDLE_H);
+
+            // Puck movement
+            puck.x += puck.vx;
+            puck.y += puck.vy;
+
+            // Top/bottom walls
+            if (puck.y - puck.r < 0) {
+                puck.y = puck.r;
+                puck.vy = -puck.vy;
+            }
+            if (puck.y + puck.r > H) {
+                puck.y = H - puck.r;
+                puck.vy = -puck.vy;
+            }
+
+            // Left wall goal detection (scoring only through opening)
+            if (puck.x - puck.r < 0) {
+                if (puck.y > GOAL_Y_TOP && puck.y < GOAL_Y_BOTTOM) {
+                    rightScore++;
+                    updateScoresUI();
+                    startGoalPause();
+                } else {
+                    puck.x = puck.r;
+                    puck.vx = -puck.vx;
+                }
+            }
+            // Right wall
+            if (puck.x + puck.r > W) {
+                if (puck.y > GOAL_Y_TOP && puck.y < GOAL_Y_BOTTOM) {
+                    leftScore++;
+                    updateScoresUI();
+                    startGoalPause();
+                } else {
+                    puck.x = W - puck.r;
+                    puck.vx = -puck.vx;
+                }
+            }
+
+            // Left paddle collision
+            if (puck.x - puck.r < 20 + PADDLE_W && puck.x + puck.r > 20) {
+                if (puck.y + puck.r > leftY && puck.y - puck.r < leftY + PADDLE_H) {
+                    let hitPos = (puck.y - leftY) / PADDLE_H;
+                    let angle = (hitPos - 0.5) * 1.3;
+                    let newVx = Math.abs(puck.vx) + ACC;
+                    if (newVx > MAX_PUCK_SPEED) newVx = MAX_PUCK_SPEED;
+                    puck.vx = newVx;
+                    puck.vy = angle * 6;
+                    puck.x = 20 + PADDLE_W + puck.r;
+                }
+            }
+
+            // Right paddle collision
+            if (puck.x + puck.r > W - 20 - PADDLE_W && puck.x - puck.r < W - 20) {
+                if (puck.y + puck.r > rightY && puck.y - puck.r < rightY + PADDLE_H) {
+                    let hitPos = (puck.y - rightY) / PADDLE_H;
+                    let angle = (hitPos - 0.5) * 1.3;
+                    let newVx = -Math.abs(puck.vx) - ACC;
+                    if (Math.abs(newVx) > MAX_PUCK_SPEED) newVx = -MAX_PUCK_SPEED;
+                    puck.vx = newVx;
+                    puck.vy = angle * 6;
+                    puck.x = W - 20 - PADDLE_W - puck.r;
+                }
+            }
+        }
+
+        function drawRoundedRect(x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.fill();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+            // Ice surface
+            ctx.fillStyle = '#2c6e4f';
+            ctx.fillRect(0, 0, W, H);
+
+            // Center line and circle
+            ctx.strokeStyle = '#ffd966';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(W/2, 0);
+            ctx.lineTo(W/2, H);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(W/2, H/2, 50, 0, 2*Math.PI);
+            ctx.stroke();
+
+            // ----- SOLID GOAL POSTS (larger than paddle) -----
+            const POST_WIDTH = 16;   // thicker than paddle width (18, but visually larger)
+            const POST_COLOR = '#8b5a2b';
+            const POST_HIGHLIGHT = '#b87c4f';
+
+            // Left goal posts
+            // Top post
+            ctx.fillStyle = POST_COLOR;
+            ctx.fillRect(0, GOAL_Y_TOP - 10, POST_WIDTH, 12);
+            ctx.fillStyle = POST_HIGHLIGHT;
+            ctx.fillRect(2, GOAL_Y_TOP - 8, POST_WIDTH-4, 8);
+            // Bottom post
+            ctx.fillStyle = POST_COLOR;
+            ctx.fillRect(0, GOAL_Y_BOTTOM - 2, POST_WIDTH, 12);
+            ctx.fillStyle = POST_HIGHLIGHT;
+            ctx.fillRect(2, GOAL_Y_BOTTOM, POST_WIDTH-4, 8);
+            // Vertical post (left side)
+            ctx.fillStyle = POST_COLOR;
+            ctx.fillRect(0, GOAL_Y_TOP - 5, POST_WIDTH, (GOAL_Y_BOTTOM - GOAL_Y_TOP) + 10);
+            ctx.fillStyle = POST_HIGHLIGHT;
+            ctx.fillRect(2, GOAL_Y_TOP - 3, POST_WIDTH-4, (GOAL_Y_BOTTOM - GOAL_Y_TOP) + 6);
+
+            // Right goal posts
+            ctx.fillStyle = POST_COLOR;
+            ctx.fillRect(W - POST_WIDTH, GOAL_Y_TOP - 10, POST_WIDTH, 12);
+            ctx.fillStyle = POST_HIGHLIGHT;
+            ctx.fillRect(W - POST_WIDTH + 2, GOAL_Y_TOP - 8, POST_WIDTH-4, 8);
+            ctx.fillStyle = POST_COLOR;
+            ctx.fillRect(W - POST_WIDTH, GOAL_Y_BOTTOM - 2, POST_WIDTH, 12);
+            ctx.fillStyle = POST_HIGHLIGHT;
+            ctx.fillRect(W - POST_WIDTH + 2, GOAL_Y_BOTTOM, POST_WIDTH-4, 8);
+            ctx.fillStyle = POST_COLOR;
+            ctx.fillRect(W - POST_WIDTH, GOAL_Y_TOP - 5, POST_WIDTH, (GOAL_Y_BOTTOM - GOAL_Y_TOP) + 10);
+            ctx.fillStyle = POST_HIGHLIGHT;
+            ctx.fillRect(W - POST_WIDTH + 2, GOAL_Y_TOP - 3, POST_WIDTH-4, (GOAL_Y_BOTTOM - GOAL_Y_TOP) + 6);
+
+            // Subtle net pattern (drawn behind the posts, but we draw after posts to keep net visible)
+            ctx.strokeStyle = '#aaaaaa80';
+            ctx.lineWidth = 1;
+            // Left net
+            for (let i = 0; i < 6; i++) {
+                ctx.beginPath();
+                ctx.moveTo(5, GOAL_Y_TOP + i * 15);
+                ctx.lineTo(POST_WIDTH, GOAL_Y_TOP + i * 15);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(5 + i * 2, GOAL_Y_TOP);
+                ctx.lineTo(5 + i * 2, GOAL_Y_BOTTOM);
+                ctx.stroke();
+            }
+            // Right net
+            for (let i = 0; i < 6; i++) {
+                ctx.beginPath();
+                ctx.moveTo(W - POST_WIDTH, GOAL_Y_TOP + i * 15);
+                ctx.lineTo(W - 5, GOAL_Y_TOP + i * 15);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(W - POST_WIDTH + i * 2, GOAL_Y_TOP);
+                ctx.lineTo(W - POST_WIDTH + i * 2, GOAL_Y_BOTTOM);
+                ctx.stroke();
+            }
+
+            // Rounded paddles
+            ctx.fillStyle = '#e34d4d';
+            drawRoundedRect(20, leftY, PADDLE_W, PADDLE_H, 8);
+            ctx.fillStyle = '#3a86ff';
+            drawRoundedRect(W-20-PADDLE_W, rightY, PADDLE_W, PADDLE_H, 8);
+
+            // Puck
+            ctx.fillStyle = '#f5bc70';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.arc(puck.x, puck.y, puck.r, 0, 2*Math.PI);
+            ctx.fill();
+            ctx.fillStyle = '#875e2c';
+            ctx.font = 'bold 16px monospace';
+            ctx.fillText('⚫', puck.x-6, puck.y+5);
+            ctx.shadowBlur = 0;
+
+            // Scores
+            ctx.font = 'bold 28px monospace';
+            ctx.fillStyle = '#ffffffcc';
+            ctx.fillText(leftScore, W/2 - 60, 50);
+            ctx.fillText(rightScore, W/2 + 45, 50);
+        }
+
+        // Keyboard handlers
+        function handleKeyDown(e) {
+            const key = e.key;
+            if (key === 'w' || key === 'W') { leftUp = true; e.preventDefault(); }
+            if (key === 's' || key === 'S') { leftDown = true; e.preventDefault(); }
+            if (key === 'ArrowUp') { rightUp = true; e.preventDefault(); }
+            if (key === 'ArrowDown') { rightDown = true; e.preventDefault(); }
+        }
+        function handleKeyUp(e) {
+            const key = e.key;
+            if (key === 'w' || key === 'W') leftUp = false;
+            if (key === 's' || key === 'S') leftDown = false;
+            if (key === 'ArrowUp') rightUp = false;
+            if (key === 'ArrowDown') rightDown = false;
+        }
+
+        // Touch controls
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = W / rect.width;
+            const scaleY = H / rect.height;
+            for (let i = 0; i < e.touches.length; i++) {
+                const t = e.touches[i];
+                const tx = (t.clientX - rect.left) * scaleX;
+                const ty = (t.clientY - rect.top) * scaleY;
+                if (tx < W/2) leftTouchY = ty;
+                else rightTouchY = ty;
+            }
+        }
+        function handleTouchMove(e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = W / rect.width;
+            const scaleY = H / rect.height;
+            for (let i = 0; i < e.touches.length; i++) {
+                const t = e.touches[i];
+                const tx = (t.clientX - rect.left) * scaleX;
+                const ty = (t.clientY - rect.top) * scaleY;
+                if (tx < W/2) leftTouchY = ty;
+                else rightTouchY = ty;
+            }
+        }
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            leftTouchY = null;
+            rightTouchY = null;
+        }
+
+        // Mode switching
+        function setAIMode() {
+            gameMode = 'ai';
+            aiModeBtn.classList.add('active');
+            twoPlayerBtn.classList.remove('active');
+            resetGame();
+        }
+        function setTwoPlayerMode() {
+            gameMode = 'twoPlayer';
+            twoPlayerBtn.classList.add('active');
+            aiModeBtn.classList.remove('active');
+            resetGame();
+        }
+
+        canvas.addEventListener('click', () => canvas.focus());
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd);
+        canvas.addEventListener('touchcancel', handleTouchEnd);
+
+        resetBtn.addEventListener('click', resetGame);
+        aiModeBtn.addEventListener('click', setAIMode);
+        twoPlayerBtn.addEventListener('click', setTwoPlayerMode);
+
+        function animate() {
+            update();
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        resetGame();
+        animate();
+    })();
+</script>
+</body>
+</html>
